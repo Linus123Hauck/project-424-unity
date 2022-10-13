@@ -5,6 +5,7 @@ namespace Perrinn424.TelemetryLapSystem
     [System.Serializable]
     public class TelemetryLapMetadata
     {
+        public string buildVersion = "v1.0";
         public string trackName;
         public int fileFormatVersion;
         public int frequency;

@@ -18,6 +18,7 @@ class Perrinn424InputUser : InputUser
 	public InputSlider brake 		= new InputSlider("Brake");
 	public InputButton gearUp		= new InputButton("GearShiftUp");
 	public InputButton gearDown		= new InputButton("GearShiftDown");
+	public InputButton drsEnable	= new InputButton("DrsEnable");
 	}
 
 
@@ -27,24 +28,29 @@ public class Perrinn424Input : VehicleBehaviour
 
 	[Header("Force Feedback")]
 	public bool forceFeedbackEnabled = true;
+	public bool rumbleEnabled = true;
 
-	public enum ForceFeedbackModel { V1, V2 }
-	public ForceFeedbackModel forceFeedbackModel = ForceFeedbackModel.V1;
-	public bool ffbTelemetry = true;
-	[Header("Force Feedback V2")]
-	public ForceFeedbackModelV2.Settings ffbSettingsV2 = new ForceFeedbackModelV2.Settings();
-	[Header("Force Feedback V1")]
-	public ForceFeedbackModelV1.Settings ffbSettingsV1 = new ForceFeedbackModelV1.Settings();
-	public bool rumbleEnabled = false;
-	public ForceFeedbackModelV1.RumbleSettings ffbRumbleV1 = new ForceFeedbackModelV1.RumbleSettings();
+	[Space(5)]
+	public ForceFeedbackHelper.Settings forceFeedbackSettings = new ForceFeedbackHelper.Settings();
+	public ForceFeedbackHelper.RumbleSettings rumbleSettings = new ForceFeedbackHelper.RumbleSettings();
+
+
+	// Expose force feedback for analysis
+
+	public InputDevice.ForceFeedback ForceFeedback ()
+		{
+		InputDevice.ForceFeedback forceFeedback = m_input != null? m_input.steer.ForceFeedback() : null;
+		if (forceFeedback == null)
+			forceFeedback = m_internalFF;
+
+		return forceFeedback;
+		}
 
 
 	// Private fields
 
 	Perrinn424InputUser m_input;
-	ForceFeedbackModelV1 m_ffbV1;
-	ForceFeedbackModelV2 m_ffbV2;
-
+	ForceFeedbackHelper m_ffHelper;
 	InputDevice.ForceFeedback m_internalFF = new InputDevice.ForceFeedback();
 	bool m_ffEnabled = false;
 
@@ -59,18 +65,9 @@ public class Perrinn424Input : VehicleBehaviour
 		m_input = new Perrinn424InputUser(inputUserName);
 		InputManager.instance.RegisterUser(m_input);
 
-		// Instantiate and initialize both models. This allows switching among them anytime.
-
-		m_ffbV1 = new ForceFeedbackModelV1();
-		m_ffbV1.settings = ffbSettingsV1;
-		m_ffbV1.rumbleSettings = ffbRumbleV1;
-		m_ffbV1.Initialize(vehicle);
-
-		m_ffbV2 = new ForceFeedbackModelV2();
-		m_ffbV2.settings = ffbSettingsV2;
-		m_ffbV2.Initialize(vehicle);
-
-		// Read steering settings for the steering range
+		m_ffHelper = new ForceFeedbackHelper(vehicle);
+		m_ffHelper.settings = forceFeedbackSettings;
+		m_ffHelper.rumbleSettings = rumbleSettings;
 
 		m_steeringSettings = vehicle.GetInternalObject(typeof(Steering.Settings)) as Steering.Settings;
 		}
@@ -80,7 +77,7 @@ public class Perrinn424Input : VehicleBehaviour
 		{
 		// Stop force feedback
 
-		InputDevice.ForceFeedback forceFeedback = m_input.steer.GetForceFeedback();
+		InputDevice.ForceFeedback forceFeedback = m_input.steer.ForceFeedback();
 		if (forceFeedback == null)
 			forceFeedback = m_internalFF;
 
@@ -119,6 +116,10 @@ public class Perrinn424Input : VehicleBehaviour
 
 		if (m_input.gearUp.PressedThisFrame()) inputData[InputData.AutomaticGear]++;
 		if (m_input.gearDown.PressedThisFrame()) inputData[InputData.AutomaticGear]--;
+
+		// DRS
+
+		if (m_input.drsEnable.PressedThisFrame()) raceInputData[RaceInputData.Drs] = 1;
 		}
 
 
@@ -126,9 +127,10 @@ public class Perrinn424Input : VehicleBehaviour
 	public override void FixedUpdateVehicle ()
 		{
 		// Calculate and process force feedback.
-		// FixedUpdateVehicle happens right after the vehicle simulation step, with all internal values updated.
+		// FixedUpdateVehicle happens right after the vehicle simulation step,
+		// with all interal values updated.
 
-		InputDevice.ForceFeedback forceFeedback = m_input.steer.GetForceFeedback();
+		InputDevice.ForceFeedback forceFeedback = m_input.steer.ForceFeedback();
 		if (forceFeedback == null)
 			forceFeedback = m_internalFF;
 
@@ -142,124 +144,48 @@ public class Perrinn424Input : VehicleBehaviour
 
 		if (m_ffEnabled)
 			{
-			if (forceFeedbackModel == ForceFeedbackModel.V1)
-				{
-				m_ffbV1.rumbleEnabled = rumbleEnabled;
-				m_ffbV1.Update(vehicle, forceFeedback);
-				}
-			else
-				{
-				m_ffbV2.Update(vehicle, forceFeedback);
-				}
+			m_ffHelper.Update();
+			ProcessForceFeedback(forceFeedback);
 			}
 		}
 
 
-	// Expose calculated force feedback values
-
-
-	public InputDevice.ForceFeedback GetForceFeedback ()
+	void ProcessForceFeedback (InputDevice.ForceFeedback forceFeedback)
 		{
-		InputDevice.ForceFeedback forceFeedback = m_input != null? m_input.steer.GetForceFeedback() : null;
-		if (forceFeedback == null)
-			forceFeedback = m_internalFF;
+		(float forceFactor, float dragFactor, float frictionFactor) = m_ffHelper.GetForceFeedback();
 
-		return forceFeedback;
-		}
+		// Main force force feedback
+		// The direction of a force is the direction from which it comes.
+		// A positive force on a given axis pushes from the positive toward the negative.
 
+		forceFeedback.force = true;
+		forceFeedback.forceMagnitude = -forceFactor;
 
+		// Play damper resistance based on the weight on the steering wheels
 
-	// Telemetry
+		forceFeedback.damper = true;
+		forceFeedback.damperCoefficient = dragFactor;
 
+		// Play extra friction at low speeds
 
-	public override bool EmitTelemetry ()
-		{
-		return ffbTelemetry;
-		}
+		forceFeedback.friction = true;
+		forceFeedback.frictionCoefficient = frictionFactor;
 
+		// Apply rumble
 
-	public override void RegisterTelemetry ()
-		{
-		vehicle.telemetry.Register<Perrinn424ForceFeedback>(this);
-		}
-
-
-	public override void UnregisterTelemetry ()
-		{
-		vehicle.telemetry.Unregister<Perrinn424ForceFeedback>(this);
-		}
-
-
-	public class Perrinn424ForceFeedback : Telemetry.ChannelGroup
-		{
-		Perrinn424Input m_input;
-
-
-		public override int GetChannelCount ()
+		if (rumbleEnabled)
 			{
-			return 8;
+			(float rumbleIntensity, float rumbleFrequency) = m_ffHelper.GetRumble();
+
+			forceFeedback.rumble = true;
+			forceFeedback.rumbleMagnitude = rumbleIntensity;
+			forceFeedback.rumbleFrequency = rumbleFrequency;
 			}
-
-
-		public override Telemetry.PollFrequency GetPollFrequency ()
+		else
 			{
-			return Telemetry.PollFrequency.Normal;
-			}
-
-
-		public override void GetChannelInfo (Telemetry.ChannelInfo[] channelInfo, Object instance)
-			{
-			m_input = instance as Perrinn424Input;
-
-			// Fill-in channel information
-
-			channelInfo[0].SetNameAndSemantic("ForceFeedbackForceRatio", Telemetry.Semantic.SignedRatio);
-			channelInfo[1].SetNameAndSemantic("ForceFeedbackDamperRatio", Telemetry.Semantic.Ratio);
-
-			Telemetry.SemanticInfo rackLoadSemantic = new Telemetry.SemanticInfo();
-			rackLoadSemantic.SetRangeAndFormat(-10000.0f, 10000.0f, "0", " N", quantization:1000);
-
-			channelInfo[2].SetNameAndSemantic("FFBTrackroadLoadLeft", Telemetry.Semantic.Custom, rackLoadSemantic);
-			channelInfo[3].SetNameAndSemantic("FFBTrackroadLoadRight", Telemetry.Semantic.Custom, rackLoadSemantic);
-			channelInfo[4].SetNameAndSemantic("FFBSteeringRackLoad", Telemetry.Semantic.Custom, rackLoadSemantic);
-
-			Telemetry.SemanticInfo steeringLoadSemantic = new Telemetry.SemanticInfo();
-			steeringLoadSemantic.SetRangeAndFormat(-80.0f, 80.0f, "0.0", " Nm", quantization:10);
-
-			channelInfo[5].SetNameAndSemantic("FFBSteeringColumnLoad", Telemetry.Semantic.Custom, steeringLoadSemantic);
-			channelInfo[6].SetNameAndSemantic("FFBSteeringAssistanceLoad", Telemetry.Semantic.Custom, steeringLoadSemantic);
-			channelInfo[7].SetNameAndSemantic("FFBSteeringWheelLoad", Telemetry.Semantic.Custom, steeringLoadSemantic);
-			}
-
-
-		public override void PollValues (float[] values, int index, Object instance)
-			{
-			// Final calculated FFB values
-
-			values[index+0] = float.NaN;
-			values[index+1] = float.NaN;
-
-			InputDevice.ForceFeedback forceFeedback = m_input.GetForceFeedback();
-
-			if (forceFeedback != null)
-				{
-				values[index+0] = forceFeedback.force? forceFeedback.forceMagnitude : 0.0f;
-				values[index+1] = forceFeedback.damper? forceFeedback.damperCoefficient : 0.0f;
-				}
-
-			// Intermediate values from FFB Model V2
-
-			ForceFeedbackModelV2 modelV2 = m_input.m_ffbV2;
-
-			values[index+2] = modelV2.trackroadLoadLeft;
-			values[index+3] = modelV2.trackroadLoadRight;
-			values[index+4] = modelV2.steeringRackLoad;
-			values[index+5] = modelV2.steeringColumnLoad;
-			values[index+6] = modelV2.steeringAssistanceLoad;
-			values[index+7] = modelV2.steeringWheelLoad;
+			forceFeedback.rumble = false;
 			}
 		}
-
 	}
 
 }

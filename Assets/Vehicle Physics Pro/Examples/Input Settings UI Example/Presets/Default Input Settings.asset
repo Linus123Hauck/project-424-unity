@@ -32,3 +32,6 @@ MonoBehaviour:
     - action: PlayerCar.GearShiftDown
       control: PageUp
       settings: 
+    - action: PlayerCar.DrsEnable
+      control: RightShift
+      settings: 

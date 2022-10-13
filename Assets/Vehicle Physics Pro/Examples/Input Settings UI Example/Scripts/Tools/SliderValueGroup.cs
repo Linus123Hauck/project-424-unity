@@ -19,7 +19,6 @@ public class SliderValueGroup : MonoBehaviour
 	public Slider slider;
 	public Text text;
 	public string format = "0.0";
-	public float multiplier = 1.0f;
 
 
 	void OnEnable ()
@@ -43,23 +42,10 @@ public class SliderValueGroup : MonoBehaviour
 		}
 
 
-	public void SetValue (float value)
-		{
-		if (slider != null)
-			slider.value = value / multiplier;
-		}
-
-
-	public float GetValue (float defaultValue = 0.0f)
-		{
-		return slider != null? slider.value * multiplier : defaultValue;
-		}
-
-
-	private void SliderChanged (float value)
+	void SliderChanged (float value)
 		{
 		if (text != null)
-			text.text = (value * multiplier).ToString(format);
+			text.text = value.ToString(format);
 		}
 	}
 }

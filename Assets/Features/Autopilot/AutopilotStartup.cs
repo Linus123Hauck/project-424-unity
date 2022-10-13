@@ -44,6 +44,8 @@ namespace Perrinn424.AutopilotSystem
             rotationCorrector.Correct(sample.rotation);
 
             Sample startupSample = sample;
+            startupSample.rawBrake = 0;
+            startupSample.rawThrottle = (int)(10000*throttle);
             
             startupSample.brakePressure = 0;
             startupSample.throttle = (int)(100 * throttle);

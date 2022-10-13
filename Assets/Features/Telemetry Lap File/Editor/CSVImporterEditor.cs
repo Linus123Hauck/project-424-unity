@@ -1,5 +1,6 @@
 ﻿using Perrinn424.AutopilotSystem;
 using System;
+using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -25,10 +26,14 @@ namespace Perrinn424.TelemetryLapSystem.Editor
                 try
                 {
                     TelemetryLapAsset telemetryLap = FileFormatConverterUtils.CSVToTelemetryLapAsset(path);
+                    VPReplayAsset replayAsset = FileFormatConverterUtils.TelemetryLapToReplayAsset(telemetryLap);
                     RecordedLap recordedLap = FileFormatConverterUtils.TelemetryLapToRecordedLap(telemetryLap);
 
                     string telemetryLapFilePath = $"Assets/Replays/{telemetryLap.name}.asset";
                     AssetDatabase.CreateAsset(telemetryLap, telemetryLapFilePath);
+
+                    string replayFilePath = $"Assets/Replays/{replayAsset.name}_replay.asset";
+                    AssetDatabase.CreateAsset(replayAsset, replayFilePath);
 
                     string recorededLapFilePath = $"Assets/Replays/{recordedLap.name}_autopilot.asset";
                     AssetDatabase.CreateAsset(recordedLap, recorededLapFilePath);
@@ -38,6 +43,8 @@ namespace Perrinn424.TelemetryLapSystem.Editor
                         Autopilot autopilot = FindObjectInSceneEvenIfIsDisabled<Autopilot>();
                         autopilot.recordedLap = recordedLap;
                         PrefabUtility.RecordPrefabInstancePropertyModifications(autopilot);
+                        AutopilotProvider provider = FindObjectInSceneEvenIfIsDisabled<AutopilotProvider>();
+                        provider.replayAsset = replayAsset;
 
                         Selection.activeGameObject = autopilot.gameObject;
                         Scene scene = autopilot.gameObject.scene;

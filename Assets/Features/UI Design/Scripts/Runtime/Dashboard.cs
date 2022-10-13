@@ -1,9 +1,11 @@
 ﻿using Perrinn424.AutopilotSystem;
 using Perrinn424.Utilities;
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using VehiclePhysics;
 using VehiclePhysics.Timing;
+using VehiclePhysics.UI;
 
 namespace Perrinn424.UI
 {
@@ -110,7 +112,9 @@ namespace Perrinn424.UI
 
         private void WriteDiffs()
         {
-            referenceDiffText.text = autopilot.DeltaTime.ToString("+0.00 SEC;-0.00 SEC"); ;
+            float compare = m_lapTimer.currentLapTime - autopilot.CalculatePlayingTime();
+            string diff = compare.ToString("+0.00;-0.00");
+            referenceDiffText.text = $"{diff} SEC";
         }
 
         private void WriteBatteryInfo()

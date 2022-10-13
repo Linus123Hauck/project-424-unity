@@ -61,7 +61,7 @@ public class AutopilotOptimizer : VehicleBehaviour
 
     private void OnLapHandler(float lapTime, bool validBool, float[] sectors, bool[] validSectors)
     {
-        CurrentSample.diffTimes.Add(lapTime - autopilot.Duration);
+        CurrentSample.diffTimes.Add(lapTime - autopilot.CalculateDuration());
         if (CurrentSample.diffTimes.Count == lapsPerSample)
         {
             CurrentSample.Close();

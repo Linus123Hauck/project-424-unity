@@ -398,7 +398,7 @@ public class Perrinn424GenericTelemetry : VehicleBehaviour
 
 			if (m_input != null && m_input.isActiveAndEnabled)
 				{
-				InputDevice.ForceFeedback forceFeedback = m_input.GetForceFeedback();
+				InputDevice.ForceFeedback forceFeedback = m_input.ForceFeedback();
 
 				if (forceFeedback != null)
 					{
